@@ -11,6 +11,11 @@ typedef struct {
     Token *tokens;
     int size;
     int capacity;
+    
+    /* Array separado para valores numéricos (cache-friendly) */
+    double *values;
+    int values_size;
+    int values_capacity;
 } TokenBuffer;
 
 /* Estados de parsing */

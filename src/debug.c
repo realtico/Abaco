@@ -73,7 +73,8 @@ void debug_print_tokens(const TokenBuffer *buf) {
         Token *token = &buf->tokens[i];
         
         if (token->type == TOKEN_NUMBER) {
-            printf("[%2d] %-12s value=%.6g\n", i, debug_token_name(token->type), token->value);
+            double value = buf->values[token->value_index];
+            printf("[%2d] %-12s value=%.6g\\n", i, debug_token_name(token->type), value);
         } else if (token->type == TOKEN_END) {
             printf("[%2d] %-12s\n", i, debug_token_name(token->type));
         } else {
@@ -114,7 +115,8 @@ void debug_print_bytecode(const TokenBuffer *buf) {
     for (int i = 0; i < buf->size; i++) {
         printf("  [%d] 0x%02X = %3d  ← %s", i, bytecode[i], bytecode[i], debug_token_name(buf->tokens[i].type));
         if (buf->tokens[i].type == TOKEN_NUMBER) {
-            printf(" (valor: %.6g)", buf->tokens[i].value);
+            double value = buf->values[buf->tokens[i].value_index];
+            printf(" (valor: %.6g)", value);
         }
         printf("\n");
     }
