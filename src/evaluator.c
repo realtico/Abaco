@@ -7,6 +7,9 @@
 #define M_PI_CUSTOM 3.14159265358979323846
 #define M_E_CUSTOM  2.71828182845904523536
 
+/* Tamanho máximo da pilha de avaliação (otimização de desempenho) */
+#define MAX_EVAL_STACK_SIZE 64
+
 /* Retorna valor de uma constante */
 static double get_constant_value(TokenType type) {
     switch (type) {
@@ -47,6 +50,9 @@ static EvalResult apply_function(TokenType type, double arg) {
                 return result;
             }
             result.value = sqrt(arg);
+            break;
+        case TOKEN_EXP:
+            result.value = exp(arg);
             break;
         case TOKEN_LOG:
             if (arg <= 0.0) {
@@ -201,12 +207,8 @@ EvalResult evaluator_eval_rpn(const TokenBuffer *rpn, double var_value) {
         return result;
     }
     
-    /* Pilha de valores (doubles) */
-    double *stack = malloc(rpn->size * sizeof(double));
-    if (!stack) {
-        result.error = EVAL_STACK_ERROR;
-        return result;
-    }
+    /* Pilha estática de valores (sem malloc/free para otimização) */
+    double stack[MAX_EVAL_STACK_SIZE];
     int stack_top = -1;
     
     /* Processa cada token da expressão RPN */
@@ -219,21 +221,32 @@ EvalResult evaluator_eval_rpn(const TokenBuffer *rpn, double var_value) {
         
         /* Número: empilha */
         if (type == TOKEN_NUMBER) {
+            if (stack_top >= MAX_EVAL_STACK_SIZE - 1) {
+                result.error = EVAL_STACK_ERROR;
+                return result;
+            }
             stack[++stack_top] = token.value;
         }
         /* Variável: empilha valor fornecido */
         else if (is_variable(type)) {
+            if (stack_top >= MAX_EVAL_STACK_SIZE - 1) {
+                result.error = EVAL_STACK_ERROR;
+                return result;
+            }
             stack[++stack_top] = var_value;
         }
         /* Constante: empilha valor */
         else if (is_constant(type)) {
+            if (stack_top >= MAX_EVAL_STACK_SIZE - 1) {
+                result.error = EVAL_STACK_ERROR;
+                return result;
+            }
             stack[++stack_top] = get_constant_value(type);
         }
         /* Operador binário: desempilha 2, calcula, empilha */
         else if (is_binary_operator(type)) {
             if (stack_top < 1) {
                 /* Pilha insuficiente */
-                free(stack);
                 result.error = EVAL_STACK_ERROR;
                 return result;
             }
@@ -243,7 +256,6 @@ EvalResult evaluator_eval_rpn(const TokenBuffer *rpn, double var_value) {
             
             EvalResult op_result = apply_operator(type, left, right);
             if (op_result.error != EVAL_OK) {
-                free(stack);
                 return op_result;
             }
             
@@ -253,7 +265,6 @@ EvalResult evaluator_eval_rpn(const TokenBuffer *rpn, double var_value) {
         else if (is_unary_function(type)) {
             if (stack_top < 0) {
                 /* Pilha vazia */
-                free(stack);
                 result.error = EVAL_STACK_ERROR;
                 return result;
             }
@@ -262,7 +273,6 @@ EvalResult evaluator_eval_rpn(const TokenBuffer *rpn, double var_value) {
             
             EvalResult func_result = apply_function(type, arg);
             if (func_result.error != EVAL_OK) {
-                free(stack);
                 return func_result;
             }
             
@@ -272,13 +282,11 @@ EvalResult evaluator_eval_rpn(const TokenBuffer *rpn, double var_value) {
     
     /* Deve sobrar exatamente 1 valor na pilha */
     if (stack_top != 0) {
-        free(stack);
         result.error = EVAL_STACK_ERROR;
         return result;
     }
     
     result.value = stack[0];
-    free(stack);
     
     return result;
 }
