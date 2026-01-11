@@ -11,6 +11,10 @@ LocaleConfig parser_locale = LOCALE_POINT;  /* Padrão: ponto decimal */
 /* Forward declarations */
 static ParserError parser_check_syntax(TokenBuffer *tokens);
 static ParserError parser_check_variables(TokenBuffer *tokens);
+static int is_operator(TokenType type);
+static int is_function(TokenType type);
+static int is_variable(TokenType type);
+static int is_constant(TokenType type);
 
 /* Configura o locale para parsing */
 void parser_set_locale(LocaleConfig locale) {
@@ -211,7 +215,7 @@ static ParserError parser_check_variables(TokenBuffer *tokens) {
     for (int i = 0; i < tokens->size; i++) {
         TokenType type = tokens->tokens[i].type;
         
-        if (type == TOKEN_VARIABLE_X || type == TOKEN_VARIABLE_THETA || type == TOKEN_VARIABLE_T) {
+        if (is_variable(type)) {
             if (found_var == TOKEN_END) {
                 found_var = type;
             } else if (found_var != type) {
@@ -243,17 +247,148 @@ static ParserError parser_check_syntax(TokenBuffer *tokens) {
     return PARSER_OK;
 }
 
-/* Stub: será implementado depois */
+/* Retorna precedência de um operador (maior = mais prioritário) */
+static int get_precedence(TokenType type) {
+    switch (type) {
+        case TOKEN_POW:
+            return 4;
+        case TOKEN_MULT:
+        case TOKEN_DIV:
+            return 3;
+        case TOKEN_PLUS:
+        case TOKEN_MINUS:
+            return 2;
+        default:
+            /* Funções retornam 0, mas esse valor nunca é consultado.
+               Na prática, funções têm precedência "infinita" estrutural:
+               bloqueiam desempilhamento via is_operator() e só saem no ')' */
+            return 0;
+    }
+}
+
+/* Verifica se o token é um operador */
+static int is_operator(TokenType type) {
+    return (type == TOKEN_PLUS || type == TOKEN_MINUS || 
+            type == TOKEN_MULT || type == TOKEN_DIV || type == TOKEN_POW);
+}
+
+/* Verifica se o token é uma função (usa range para extensibilidade) */
+static int is_function(TokenType type) {
+    return (type >= TOKEN_FUNCTION_START && type <= TOKEN_FUNCTION_END);
+}
+
+/* Verifica se o token é uma variável (usa range para extensibilidade) */
+static int is_variable(TokenType type) {
+    return (type >= TOKEN_VARIABLE_START && type <= TOKEN_VARIABLE_END);
+}
+
+/* Verifica se o token é uma constante (usa range para extensibilidade) */
+static int is_constant(TokenType type) {
+    return (type >= TOKEN_CONST_START && type <= TOKEN_CONST_END);
+}
+
+/* Algoritmo Shunting Yard - Converte infixa para RPN */
 ParserError parser_to_rpn(TokenBuffer *tokens, TokenBuffer *rpn) {
-    /* Por enquanto, apenas copia os tokens */
+    if (!tokens || !rpn) return PARSER_SYNTAX_ERROR;
+    
     parser_init_buffer(rpn);
     
+    /* Pilha de operadores */
+    Token *stack = malloc(tokens->size * sizeof(Token));
+    if (!stack) return PARSER_MEMORY_ERROR;
+    int stack_top = -1;
+    
+    /* Processa cada token */
     for (int i = 0; i < tokens->size; i++) {
-        if (!parser_add_token(rpn, tokens->tokens[i])) {
+        Token token = tokens->tokens[i];
+        TokenType type = token.type;
+        
+        /* Fim da expressão - para de processar */
+        if (type == TOKEN_END) break;
+        
+        /* Números, variáveis e constantes vão direto para a saída */
+        if (type == TOKEN_NUMBER || is_variable(type) || is_constant(type)) {
+            if (!parser_add_token(rpn, token)) {
+                free(stack);
+                parser_free_buffer(rpn);
+                return PARSER_MEMORY_ERROR;
+            }
+        }
+        /* Funções vão para a pilha */
+        else if (is_function(type)) {
+            stack[++stack_top] = token;
+        }
+        /* Parêntese esquerdo vai para a pilha */
+        else if (type == TOKEN_LPAREN) {
+            stack[++stack_top] = token;
+        }
+        /* Parêntese direito: desempilha até encontrar '(' */
+        else if (type == TOKEN_RPAREN) {
+            while (stack_top >= 0 && stack[stack_top].type != TOKEN_LPAREN) {
+                if (!parser_add_token(rpn, stack[stack_top--])) {
+                    free(stack);
+                    parser_free_buffer(rpn);
+                    return PARSER_MEMORY_ERROR;
+                }
+            }
+            
+            /* Remove o '(' da pilha */
+            if (stack_top >= 0) stack_top--;
+            
+            /* Se há uma função no topo, desempilha ela também */
+            if (stack_top >= 0 && is_function(stack[stack_top].type)) {
+                if (!parser_add_token(rpn, stack[stack_top--])) {
+                    free(stack);
+                    parser_free_buffer(rpn);
+                    return PARSER_MEMORY_ERROR;
+                }
+            }
+        }
+        /* Operadores */
+        else if (is_operator(type)) {
+            /* Desempilha operadores de maior ou igual precedência */
+            /* Exceto para ^, que é associativo à direita */
+            int prec = get_precedence(type);
+            
+            while (stack_top >= 0 && is_operator(stack[stack_top].type)) {
+                int stack_prec = get_precedence(stack[stack_top].type);
+                
+                /* Para ^: apenas desempilha se precedência for MAIOR (associativo à direita) */
+                /* Para outros: desempilha se precedência for MAIOR OU IGUAL */
+                if (type == TOKEN_POW) {
+                    if (stack_prec <= prec) break;
+                } else {
+                    if (stack_prec < prec) break;
+                }
+                
+                if (!parser_add_token(rpn, stack[stack_top--])) {
+                    free(stack);
+                    parser_free_buffer(rpn);
+                    return PARSER_MEMORY_ERROR;
+                }
+            }
+            
+            stack[++stack_top] = token;
+        }
+    }
+    
+    /* Desempilha todos os operadores restantes */
+    while (stack_top >= 0) {
+        if (!parser_add_token(rpn, stack[stack_top--])) {
+            free(stack);
             parser_free_buffer(rpn);
             return PARSER_MEMORY_ERROR;
         }
     }
     
+    /* Adiciona token de fim */
+    Token end_token = {TOKEN_END, 0};
+    if (!parser_add_token(rpn, end_token)) {
+        free(stack);
+        parser_free_buffer(rpn);
+        return PARSER_MEMORY_ERROR;
+    }
+    
+    free(stack);
     return PARSER_OK;
 }
