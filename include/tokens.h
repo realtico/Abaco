@@ -73,7 +73,7 @@ typedef enum {
 
 typedef struct {
     TokenType type;
-    double value;      /* Para TOKEN_NUMBER */
+    uint16_t value_index;  /* Índice no array de valores (apenas para TOKEN_NUMBER) */
 } Token;
 
 #endif /* TOKENS_H */

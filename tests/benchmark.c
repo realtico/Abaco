@@ -7,7 +7,7 @@
 
 /* Função hardcoded: f(x) = x * e^x */
 static double hardcoded_function(double x) {
-    return x * exp(x);
+    return x * x + 1;
 }
 
 /* Integração numérica usando método do trapézio */
@@ -54,7 +54,7 @@ static double get_time_diff(clock_t start, clock_t end) {
 }
 
 void run_benchmark(void) {
-    const char *expression = "x * exp(x)";
+    const char *expression = "x * x +1";
     const double a = 0.0;
     const double b = 1.0;
     const int n_steps = 10000000;  /* 10 milhões de pontos */

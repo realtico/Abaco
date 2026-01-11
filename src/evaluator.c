@@ -225,7 +225,8 @@ EvalResult evaluator_eval_rpn(const TokenBuffer *rpn, double var_value) {
                 result.error = EVAL_STACK_ERROR;
                 return result;
             }
-            stack[++stack_top] = token.value;
+            /* Busca valor do array separado usando o índice */
+            stack[++stack_top] = rpn->values[token.value_index];
         }
         /* Variável: empilha valor fornecido */
         else if (is_variable(type)) {

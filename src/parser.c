@@ -26,6 +26,10 @@ void parser_init_buffer(TokenBuffer *buf) {
     buf->capacity = 64;
     buf->size = 0;
     buf->tokens = malloc(buf->capacity * sizeof(Token));
+    
+    buf->values_capacity = 16;  /* Menos valores que tokens */
+    buf->values_size = 0;
+    buf->values = malloc(buf->values_capacity * sizeof(double));
 }
 
 /* Libera buffer */
@@ -34,6 +38,11 @@ void parser_free_buffer(TokenBuffer *buf) {
     buf->tokens = NULL;
     buf->size = 0;
     buf->capacity = 0;
+    
+    free(buf->values);
+    buf->values = NULL;
+    buf->values_size = 0;
+    buf->values_capacity = 0;
 }
 
 /* Adiciona token ao buffer (com realocação se necessário) */
@@ -46,6 +55,18 @@ int parser_add_token(TokenBuffer *buf, Token token) {
     }
     buf->tokens[buf->size++] = token;
     return 1;
+}
+
+/* Adiciona valor numérico ao buffer e retorna o índice */
+static int parser_add_value(TokenBuffer *buf, double value) {
+    if (buf->values_size >= buf->values_capacity) {
+        buf->values_capacity *= 2;
+        double *new_values = realloc(buf->values, buf->values_capacity * sizeof(double));
+        if (!new_values) return -1;
+        buf->values = new_values;
+    }
+    buf->values[buf->values_size] = value;
+    return buf->values_size++;
 }
 
 /* Tenta fazer parse de um número */
@@ -151,8 +172,13 @@ ParserError parser_tokenize(const char *expr, TokenBuffer *output) {
         if (isdigit(expr[i]) || (expr[i] == dec_mark && isdigit(expr[i+1]))) {
             double value;
             if (try_parse_number(expr, &i, &value)) {
+                int value_idx = parser_add_value(output, value);
+                if (value_idx < 0) {
+                    parser_free_buffer(output);
+                    return PARSER_MEMORY_ERROR;
+                }
                 token.type = TOKEN_NUMBER;
-                token.value = value;
+                token.value_index = (uint16_t)value_idx;
                 if (!parser_add_token(output, token)) {
                     parser_free_buffer(output);
                     return PARSER_MEMORY_ERROR;
@@ -172,7 +198,7 @@ ParserError parser_tokenize(const char *expr, TokenBuffer *output) {
             }
             
             token.type = kw_type;
-            token.value = 0;
+            token.value_index = 0;
             if (!parser_add_token(output, token)) {
                 parser_free_buffer(output);
                 return PARSER_MEMORY_ERROR;
@@ -182,10 +208,51 @@ ParserError parser_tokenize(const char *expr, TokenBuffer *output) {
         
         /* Caracteres especiais e operadores */
         switch (expr[i]) {
-            case '+': case '-': case '*': case '/': case '^':
+            case '+': case '*': case '/': case '^':
             case '(': case ')':
                 token.type = (TokenType)expr[i];
-                token.value = 0;
+                token.value_index = 0;
+                if (!parser_add_token(output, token)) {
+                    parser_free_buffer(output);
+                    return PARSER_MEMORY_ERROR;
+                }
+                i++;
+                break;
+            
+            case '-':
+                /* Detecta se é operador unário (negativo) */
+                /* É unário se: início da expressão, depois de '(', ou depois de operador */
+                int is_unary = 0;
+                if (output->size == 0) {
+                    /* Início da expressão */
+                    is_unary = 1;
+                } else {
+                    /* Verifica token anterior */
+                    TokenType prev = output->tokens[output->size - 1].type;
+                    if (prev == TOKEN_LPAREN || prev == TOKEN_PLUS || 
+                        prev == TOKEN_MINUS || prev == TOKEN_MULT || 
+                        prev == TOKEN_DIV || prev == TOKEN_POW) {
+                        is_unary = 1;
+                    }
+                }
+                
+                if (is_unary) {
+                    /* Insere 0 antes do menos para transformar em "0 - x" */
+                    int zero_idx = parser_add_value(output, 0.0);
+                    if (zero_idx < 0) {
+                        parser_free_buffer(output);
+                        return PARSER_MEMORY_ERROR;
+                    }
+                    Token zero_token = {TOKEN_NUMBER, (uint16_t)zero_idx};
+                    if (!parser_add_token(output, zero_token)) {
+                        parser_free_buffer(output);
+                        return PARSER_MEMORY_ERROR;
+                    }
+                }
+                
+                /* Adiciona o operador menos */
+                token.type = TOKEN_MINUS;
+                token.value_index = 0;
                 if (!parser_add_token(output, token)) {
                     parser_free_buffer(output);
                     return PARSER_MEMORY_ERROR;
@@ -307,6 +374,18 @@ ParserError parser_to_rpn(TokenBuffer *tokens, TokenBuffer *rpn) {
     if (!tokens || !rpn) return PARSER_SYNTAX_ERROR;
     
     parser_init_buffer(rpn);
+    
+    /* Copia o array de valores (compartilhado entre tokens e rpn) */
+    if (tokens->values_size > 0) {
+        rpn->values = malloc(tokens->values_size * sizeof(double));
+        if (!rpn->values) {
+            parser_free_buffer(rpn);
+            return PARSER_MEMORY_ERROR;
+        }
+        memcpy(rpn->values, tokens->values, tokens->values_size * sizeof(double));
+        rpn->values_size = tokens->values_size;
+        rpn->values_capacity = tokens->values_size;
+    }
     
     /* Pilha de operadores */
     Token *stack = malloc(tokens->size * sizeof(Token));
