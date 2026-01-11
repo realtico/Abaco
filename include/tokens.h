@@ -40,23 +40,23 @@ typedef enum {
     TOKEN_TAN        = 162,
     TOKEN_ABS        = 163,
     TOKEN_SQRT       = 164,
-    TOKEN_LOG        = 165,
-    TOKEN_LOG10      = 166,
-    TOKEN_SINH       = 167,
-    TOKEN_COSH       = 168,
-    TOKEN_TANH       = 169,
-    TOKEN_ASIN       = 170,
-    TOKEN_ACOS       = 171,
-    TOKEN_ATAN       = 172,
-    TOKEN_ASINH      = 173,
-    TOKEN_ACOSH      = 174,
-    TOKEN_ATANH      = 175,
-    TOKEN_CEIL       = 176,
-    TOKEN_FLOOR      = 177,
-    TOKEN_FRAC       = 178,
+    TOKEN_EXP        = 165,
+    TOKEN_LOG        = 166,
+    TOKEN_LOG10      = 167,
+    TOKEN_SINH       = 168,
+    TOKEN_COSH       = 169,
+    TOKEN_TANH       = 170,
+    TOKEN_ASIN       = 171,
+    TOKEN_ACOS       = 172,
+    TOKEN_ATAN       = 173,
+    TOKEN_ASINH      = 174,
+    TOKEN_ACOSH      = 175,
+    TOKEN_ATANH      = 176,
+    TOKEN_CEIL       = 177,
+    TOKEN_FLOOR      = 178,
+    TOKEN_FRAC       = 179,
     /* Slots 179-199 disponíveis para novas funções */
-    /* Slots 165-199 disponíveis para novas funções */
-    
+        
     TOKEN_END        = 255,  /* Fim da expressão */
     TOKEN_ERROR      = 256   /* Erro de parsing */
 } TokenType;
