@@ -38,6 +38,20 @@ const char* debug_token_name(TokenType type) {
         case TOKEN_TAN:          return "tan";
         case TOKEN_ABS:          return "abs";
         case TOKEN_SQRT:         return "sqrt";
+        case TOKEN_LOG:          return "log";
+        case TOKEN_LOG10:        return "log10";
+        case TOKEN_SINH:         return "sinh";
+        case TOKEN_COSH:         return "cosh";
+        case TOKEN_TANH:         return "tanh";
+        case TOKEN_ASIN:         return "asin";
+        case TOKEN_ACOS:         return "acos";
+        case TOKEN_ATAN:         return "atan";
+        case TOKEN_ASINH:        return "asinh";
+        case TOKEN_ACOSH:        return "acosh";
+        case TOKEN_ATANH:        return "atanh";
+        case TOKEN_CEIL:         return "ceil";
+        case TOKEN_FLOOR:        return "floor";
+        case TOKEN_FRAC:         return "frac";
         case TOKEN_END:          return "END";
         case TOKEN_ERROR:        return "ERROR";
         default:

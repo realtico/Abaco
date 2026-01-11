@@ -40,7 +40,21 @@ typedef enum {
     TOKEN_TAN        = 162,
     TOKEN_ABS        = 163,
     TOKEN_SQRT       = 164,
-    /* Slots 165-199 disponíveis para novas funções */
+    TOKEN_LOG        = 165,
+    TOKEN_LOG10      = 166,
+    TOKEN_SINH       = 167,
+    TOKEN_COSH       = 168,
+    TOKEN_TANH       = 169,
+    TOKEN_ASIN       = 170,
+    TOKEN_ACOS       = 171,
+    TOKEN_ATAN       = 172,
+    TOKEN_ASINH      = 173,
+    TOKEN_ACOSH      = 174,
+    TOKEN_ATANH      = 175,
+    TOKEN_CEIL       = 176,
+    TOKEN_FLOOR      = 177,
+    TOKEN_FRAC       = 178,
+    /* Slots 179-199 disponíveis para novas funções */
     /* Slots 165-199 disponíveis para novas funções */
     
     TOKEN_END        = 255,  /* Fim da expressão */
