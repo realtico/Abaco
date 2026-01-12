@@ -126,8 +126,9 @@ static TokenType try_parse_keyword(const char *str, int *pos) {
     CHECK_KEYWORD("abs", TOKEN_ABS);
     CHECK_KEYWORD("sqrt", TOKEN_SQRT);
     CHECK_KEYWORD("exp", TOKEN_EXP);
-    CHECK_KEYWORD("log", TOKEN_LOG);
     CHECK_KEYWORD("log10", TOKEN_LOG10);
+    CHECK_KEYWORD("log", TOKEN_LOG);
+    CHECK_KEYWORD("ln", TOKEN_LOG);  /* ln é alias de log (logaritmo natural) */
     CHECK_KEYWORD("sinh", TOKEN_SINH);
     CHECK_KEYWORD("cosh", TOKEN_COSH);
     CHECK_KEYWORD("tanh", TOKEN_TANH);
