@@ -12,7 +12,9 @@ OBJECTS = $(patsubst $(SRCDIR)/%.c, $(BUILDDIR)/%.o, $(SOURCES))
 
 LIB = $(BUILDDIR)/libabaco.a
 
-TEST_SOURCES = $(wildcard $(TESTDIR)/*.c)
+# abaco_test.c é o helper do test-runner (não é uma suíte em si), linkado em cada teste
+TEST_HELPER_OBJ = $(BUILDDIR)/abaco_test.o
+TEST_SOURCES = $(filter-out $(TESTDIR)/abaco_test.c, $(wildcard $(TESTDIR)/*.c))
 TEST_BINS = $(patsubst $(TESTDIR)/%.c, $(BUILDDIR)/%.test, $(TEST_SOURCES))
 
 all: $(LIB) tests
@@ -23,8 +25,11 @@ $(LIB): $(OBJECTS) | $(BUILDDIR)
 $(BUILDDIR)/%.o: $(SRCDIR)/%.c | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILDDIR)/%.test: $(TESTDIR)/%.c $(LIB) | $(BUILDDIR)
-	$(CC) $(CFLAGS) $< $(LIB) -o $@ $(LDFLAGS)
+$(TEST_HELPER_OBJ): $(TESTDIR)/abaco_test.c $(TESTDIR)/abaco_test.h | $(BUILDDIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILDDIR)/%.test: $(TESTDIR)/%.c $(LIB) $(TEST_HELPER_OBJ) | $(BUILDDIR)
+	$(CC) $(CFLAGS) $< $(TEST_HELPER_OBJ) $(LIB) -o $@ $(LDFLAGS)
 
 $(BUILDDIR):
 	mkdir -p $(BUILDDIR)
@@ -32,7 +37,12 @@ $(BUILDDIR):
 tests: $(TEST_BINS)
 
 run-tests: tests
-	@for t in $(TEST_BINS); do echo "Executando $$t:"; $$t; done
+	@status=0; \
+	for t in $(TEST_BINS); do \
+		echo "Executando $$t:"; \
+		$$t || status=1; \
+	done; \
+	exit $$status
 
 clean:
 	rm -rf $(BUILDDIR)

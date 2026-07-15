@@ -2,171 +2,133 @@
 #include <string.h>
 #include "parser.h"
 #include "evaluator.h"
-#include "debug.h"
-#include "assert.h"
+#include "abaco_test.h"
 
 static const char *const VARIABLES[] = { "x" };
 
+/* NAN sentinel: usado quando o valor esperado não importa (a expressão deve falhar
+ * antes de produzir um resultado, ou o chamador só quer checar o código de erro). */
+#define DONT_CHECK_VALUE 0.0
+
 /* Função helper para testar uma expressão. `expected_rpn_err` cobre erros que só
  * aparecem na conversão para RPN (ex.: PARSER_ARITY_ERROR); nos demais casos é
- * igual a `expected_tokenize_err`. */
+ * igual a `expected_tokenize_err`. Se `expected_eval_err == EVAL_OK`, o resultado
+ * numérico é comparado com `expected_value` (tolerância `1e-6`). */
 static void test_expression_ex(AbacoContext *ctx, const char *expr,
                                 ParserError expected_tokenize_err, ParserError expected_rpn_err,
-                                EvalError expected_eval_err) {
-    printf("\n========================================\n");
-    printf("Testando: \"%s\"\n", expr);
-    printf("========================================\n");
+                                EvalError expected_eval_err, double expected_value) {
+    printf("\n--- Testando: \"%s\" ---\n", expr);
 
     TokenBuffer tokens;
     TokenBuffer rpn;
 
     /* Tokeniza */
     ParserError err = parser_tokenize(ctx, expr, &tokens, NULL);
-    assert(err == expected_tokenize_err);
+    ABACO_ASSERT(err == expected_tokenize_err);
     if (err != PARSER_OK) {
-        printf("ERRO: ");
-        switch (err) {
-            case PARSER_UNKNOWN_IDENTIFIER:
-                printf("Identificador desconhecido\n");
-                break;
-            case PARSER_SYNTAX_ERROR:
-                printf("Erro de sintaxe\n");
-                break;
-            case PARSER_ARITY_ERROR:
-                printf("Número de argumentos incorreto\n");
-                break;
-            case PARSER_MEMORY_ERROR:
-                printf("Erro de memória\n");
-                break;
-            default:
-                printf("Erro desconhecido (%d)\n", err);
-        }
+        printf("ERRO na tokenização: %d\n", err);
         return;
     }
 
-    printf("✓ Tokenização OK\n");
-    debug_print_tokens(&tokens);
-
-    /* Bytecode compactado */
-    debug_print_bytecode(&tokens);
-
     /* Converte para RPN */
     err = parser_to_rpn(ctx, &tokens, &rpn);
-    assert(err == expected_rpn_err);
+    ABACO_ASSERT(err == expected_rpn_err);
     if (err != PARSER_OK) {
         printf("ERRO na conversão para RPN: %d\n", err);
         parser_free_buffer(&tokens);
         return;
     }
 
-    printf("✓ Conversão para RPN OK\n");
-    debug_print_tokens(&rpn);
-
     /* Avalia com valor de teste */
     double test_value = 1.0;  /* x = 1 */
-    printf("\n--- AVALIAÇÃO (x = %.2f) ---\n", test_value);
-
     EvalResult eval = evaluator_eval_rpn(ctx, &rpn, &test_value);
-    assert(eval.error == expected_eval_err);
+    ABACO_ASSERT(eval.error == expected_eval_err);
 
     if (eval.error == EVAL_OK) {
-        printf("✓ Resultado: %.6g\n", eval.value);
-
-    } else {
-        printf("✗ Erro de avaliação: ");
-        switch (eval.error) {
-            case EVAL_STACK_ERROR:
-                printf("Erro na pilha (expressão mal-formada)\n");
-                break;
-            case EVAL_DIVISION_BY_ZERO:
-                printf("Divisão por zero\n");
-                break;
-            case EVAL_DOMAIN_ERROR:
-                printf("Domínio inválido\n");
-                break;
-            case EVAL_MATH_ERROR:
-                printf("Erro matemático (overflow/NaN)\n");
-                break;
-            default:
-                printf("Erro desconhecido\n");
+        printf("Resultado: %.6g\n", eval.value);
+        if (expected_eval_err == EVAL_OK) {
+            ABACO_ASSERT_NEAR(eval.value, expected_value, 1e-6);
         }
+    } else {
+        printf("Erro de avaliação: %d\n", eval.error);
     }
 
     parser_free_buffer(&rpn);
     parser_free_buffer(&tokens);
 }
 
-/* Atalho para o caso comum: o mesmo erro esperado (ou PARSER_OK) nas duas fases. */
-static void test_expression(AbacoContext *ctx, const char *expr, ParserError expected_err, EvalError expected_eval_err) {
-    test_expression_ex(ctx, expr, expected_err, expected_err, expected_eval_err);
+/* Atalho para o caso comum: mesmo erro de parsing nas duas fases + checagem de valor. */
+static void test_expression(AbacoContext *ctx, const char *expr, double expected_value) {
+    test_expression_ex(ctx, expr, PARSER_OK, PARSER_OK, EVAL_OK, expected_value);
+}
+
+/* Atalho para expressões que devem falhar no parsing (tokenização ou RPN). */
+static void test_parser_error(AbacoContext *ctx, const char *expr, ParserError expected_tokenize_err, ParserError expected_rpn_err) {
+    test_expression_ex(ctx, expr, expected_tokenize_err, expected_rpn_err, EVAL_OK, DONT_CHECK_VALUE);
+}
+
+/* Atalho para expressões que devem falhar na avaliação (x = 1). */
+static void test_eval_error(AbacoContext *ctx, const char *expr, EvalError expected_eval_err) {
+    test_expression_ex(ctx, expr, PARSER_OK, PARSER_OK, expected_eval_err, DONT_CHECK_VALUE);
 }
 
 int main(void) {
-    printf("╔═══════════════════════════════════════════════════════════╗\n");
-    printf("║     MULTICURVAS - Parser de Expressões Matemáticas        ║\n");
-    printf("║               Fase 1: Tokenizador + RPN                   ║\n");
-    printf("╚═══════════════════════════════════════════════════════════╝\n");
-
     AbacoContext ctx;
     abaco_context_init(&ctx, VARIABLES, 1);
 
-    /* TESTE 1: Com locale POINT (padrão) */
-    printf("\n▶▶▶ TESTE COM LOCALE POINT (ponto decimal) ▶▶▶\n");
+    /* Com locale POINT (padrão), x = 1 */
+    printf("\n▶ Locale POINT (ponto decimal)\n");
     ctx.locale = LOCALE_POINT;
 
-    test_expression(&ctx, "sin(x)*2+x", PARSER_OK, EVAL_OK);
-    test_expression(&ctx, "9*(x-pi/2)", PARSER_OK, EVAL_OK);
-    test_expression(&ctx, "2*e^(-x/2)", PARSER_OK, EVAL_OK);
-    test_expression(&ctx, "3.14159", PARSER_OK, EVAL_OK);
-    test_expression(&ctx, "2.5*x+1.75", PARSER_OK, EVAL_OK);
-    test_expression(&ctx, "0.5^2", PARSER_OK, EVAL_OK);
+    test_expression(&ctx, "sin(x)*2+x", 2.682941969);
+    test_expression(&ctx, "9*(x-pi/2)", -5.137167185);
+    test_expression(&ctx, "2*e^(-x/2)", 1.213061319);
+    test_expression(&ctx, "3.14159", 3.14159);
+    test_expression(&ctx, "2.5*x+1.75", 4.25);
+    test_expression(&ctx, "0.5^2", 0.25);
 
-    /* TESTE 2: Com locale COMMA */
-    printf("\n\n▶▶▶ TESTE COM LOCALE COMMA (vírgula decimal) ▶▶▶\n");
+    /* Com locale COMMA, mesmas expressões e resultados */
+    printf("\n▶ Locale COMMA (vírgula decimal)\n");
     ctx.locale = LOCALE_COMMA;
 
-    test_expression(&ctx, "sin(x)*2+x", PARSER_OK, EVAL_OK);
-    test_expression(&ctx, "9*(x-pi/2)", PARSER_OK, EVAL_OK);
-    test_expression(&ctx, "2*e^(-x/2)", PARSER_OK, EVAL_OK);
-    test_expression(&ctx, "3,14159", PARSER_OK, EVAL_OK);
-    test_expression(&ctx, "2,5*x+1,75", PARSER_OK, EVAL_OK);
-    test_expression(&ctx, "0,5^2", PARSER_OK, EVAL_OK);
+    test_expression(&ctx, "sin(x)*2+x", 2.682941969);
+    test_expression(&ctx, "9*(x-pi/2)", -5.137167185);
+    test_expression(&ctx, "2*e^(-x/2)", 1.213061319);
+    test_expression(&ctx, "3,14159", 3.14159);
+    test_expression(&ctx, "2,5*x+1,75", 4.25);
+    test_expression(&ctx, "0,5^2", 0.25);
 
-    /* TESTE 3: Erros diversos */
-    printf("\n\n▶▶▶ TESTES COM ERROS ▶▶▶\n");
+    /* Erros diversos */
+    printf("\n▶ Erros\n");
     ctx.locale = LOCALE_POINT;
 
-    test_expression(&ctx, "cossecante(x)", PARSER_UNKNOWN_IDENTIFIER, EVAL_OK);   /* Função desconhecida */
-    test_expression(&ctx, "y + 1", PARSER_UNKNOWN_IDENTIFIER, EVAL_OK);           /* Variável não registrada no contexto */
-    test_expression(&ctx, "sin(x))", PARSER_SYNTAX_ERROR, EVAL_OK);               /* Parênteses desbalanceados */
-    test_expression(&ctx, "pi + e", PARSER_OK, EVAL_OK);                         /* Constantes */
-    test_expression(&ctx, "1/0", PARSER_OK, EVAL_DIVISION_BY_ZERO);              /* Divisão por zero */
-    test_expression(&ctx, "sqrt(-1)", PARSER_OK, EVAL_DOMAIN_ERROR);             /* Domínio inválido */
-    test_expression(&ctx, "log(0)", PARSER_OK, EVAL_DOMAIN_ERROR);               /* Log de zero */
-    test_expression_ex(&ctx, "min(1,2,3)", PARSER_OK, PARSER_ARITY_ERROR, EVAL_OK); /* Aridade incorreta: tokeniza OK, falha no RPN */
+    test_parser_error(&ctx, "cossecante(x)", PARSER_UNKNOWN_IDENTIFIER, PARSER_UNKNOWN_IDENTIFIER); /* Função desconhecida */
+    test_parser_error(&ctx, "y + 1", PARSER_UNKNOWN_IDENTIFIER, PARSER_UNKNOWN_IDENTIFIER);         /* Variável não registrada no contexto */
+    test_parser_error(&ctx, "sin(x))", PARSER_SYNTAX_ERROR, PARSER_SYNTAX_ERROR);                   /* Parênteses desbalanceados */
+    test_expression(&ctx, "pi + e", 5.859874482);                                                   /* Constantes */
+    test_eval_error(&ctx, "1/0", EVAL_DIVISION_BY_ZERO);
+    test_eval_error(&ctx, "sqrt(-1)", EVAL_DOMAIN_ERROR);
+    test_eval_error(&ctx, "log(0)", EVAL_DOMAIN_ERROR);
+    test_parser_error(&ctx, "min(1,2,3)", PARSER_OK, PARSER_ARITY_ERROR); /* Tokeniza OK, falha só no RPN (aridade) */
 
-    /* TESTE 4: Novas funções */
-    printf("\n\n▶▶▶ TESTES COM NOVAS FUNÇÕES ▶▶▶\n");
+    /* Funções */
+    printf("\n▶ Funções\n");
 
-    test_expression(&ctx, "log(e)", PARSER_OK, EVAL_OK);                  /* log(e) = 1 */
-    test_expression(&ctx, "log10(100)", PARSER_OK, EVAL_OK);              /* log10(100) = 2 */
-    test_expression(&ctx, "sinh(0)", PARSER_OK, EVAL_OK);                 /* sinh(0) = 0 */
-    test_expression(&ctx, "asin(0.5)", PARSER_OK, EVAL_OK);               /* asin(0.5) ≈ 0.523599 (π/6) */
-    test_expression(&ctx, "ceil(2.3)", PARSER_OK, EVAL_OK);               /* ceil(2.3) = 3 */
-    test_expression(&ctx, "floor(2.7)", PARSER_OK, EVAL_OK);              /* floor(2.7) = 2 */
-    test_expression(&ctx, "frac(3.14)", PARSER_OK, EVAL_OK);              /* frac(3.14) = 0.14 */
+    test_expression(&ctx, "log(e)", 1.0);
+    test_expression(&ctx, "log10(100)", 2.0);
+    test_expression(&ctx, "sinh(0)", 0.0);
+    test_expression(&ctx, "asin(0.5)", 0.5235987756);
+    test_expression(&ctx, "ceil(2.3)", 3.0);
+    test_expression(&ctx, "floor(2.7)", 2.0);
+    test_expression(&ctx, "frac(3.14)", 0.14);
 
-    /* TESTE 5: Funções multi-argumento (novidade da generalização) */
-    printf("\n\n▶▶▶ TESTES COM FUNÇÕES MULTI-ARGUMENTO ▶▶▶\n");
+    /* Funções multi-argumento */
+    printf("\n▶ Funções multi-argumento\n");
 
-    test_expression(&ctx, "atan2(1,1)", PARSER_OK, EVAL_OK);              /* atan2(1,1) = pi/4 */
-    test_expression(&ctx, "pow(2,10)", PARSER_OK, EVAL_OK);               /* pow(2,10) = 1024 */
-    test_expression(&ctx, "min(3,5)", PARSER_OK, EVAL_OK);                /* min(3,5) = 3 */
-    test_expression(&ctx, "max(3,5)", PARSER_OK, EVAL_OK);                /* max(3,5) = 5 */
+    test_expression(&ctx, "atan2(1,1)", 0.7853981634);
+    test_expression(&ctx, "pow(2,10)", 1024.0);
+    test_expression(&ctx, "min(3,5)", 3.0);
+    test_expression(&ctx, "max(3,5)", 5.0);
 
-    printf("\n╔═══════════════════════════════════════════════════════════╗\n");
-    printf("║                    Testes Completos                       ║\n");
-    printf("╚═══════════════════════════════════════════════════════════╝\n");
-
-    return 0;
+    return abaco_test_summary("evalution");
 }
