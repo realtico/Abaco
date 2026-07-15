@@ -24,27 +24,27 @@ static double integrate_hardcoded(double a, double b, int n_steps) {
 }
 
 /* Integração usando função parseada */
-static double integrate_parsed(const TokenBuffer *rpn, double a, double b, int n_steps) {
+static double integrate_parsed(const AbacoContext *ctx, const TokenBuffer *rpn, double a, double b, int n_steps) {
     double h = (b - a) / n_steps;
-    
-    EvalResult result_a = evaluator_eval_rpn(rpn, a);
-    EvalResult result_b = evaluator_eval_rpn(rpn, b);
-    
+
+    EvalResult result_a = evaluator_eval_rpn(ctx, rpn, &a);
+    EvalResult result_b = evaluator_eval_rpn(ctx, rpn, &b);
+
     if (result_a.error != EVAL_OK || result_b.error != EVAL_OK) {
         return 0.0;
     }
-    
+
     double sum = 0.5 * (result_a.value + result_b.value);
-    
+
     for (int i = 1; i < n_steps; i++) {
         double x = a + i * h;
-        EvalResult result = evaluator_eval_rpn(rpn, x);
+        EvalResult result = evaluator_eval_rpn(ctx, rpn, &x);
         if (result.error != EVAL_OK) {
             return 0.0;
         }
         sum += result.value;
     }
-    
+
     return sum * h;
 }
 
@@ -54,28 +54,32 @@ static double get_time_diff(clock_t start, clock_t end) {
 }
 
 void run_benchmark(void) {
+    static const char *const variables[] = { "x" };
+    AbacoContext ctx;
+    abaco_context_init(&ctx, variables, 1);
+
     const char *expression = "x * x +1";
     const double a = 0.0;
     const double b = 1.0;
     const int n_steps = 10000000;  /* 10 milhões de pontos */
-    
+
     printf("=== BENCHMARK: Integração de f(x) = x * e^x de %.1f a %.1f ===\n\n", a, b);
     printf("Número de pontos: %d\n", n_steps);
     printf("Expressão: %s\n\n", expression);
-    
+
     /* FASE 1: Parsing (feito apenas uma vez) */
     printf("--- FASE 1: Parsing (overhead único) ---\n");
     clock_t parse_start = clock();
-    
+
     TokenBuffer tokens;
-    ParserError err = parser_tokenize(expression, &tokens);
+    ParserError err = parser_tokenize(&ctx, expression, &tokens, NULL);
     if (err != PARSER_OK) {
         printf("Erro no parsing: %d\n", err);
         return;
     }
-    
+
     TokenBuffer rpn;
-    err = parser_to_rpn(&tokens, &rpn);
+    err = parser_to_rpn(&ctx, &tokens, &rpn);
     if (err != PARSER_OK) {
         printf("Erro na conversão RPN: %d\n", err);
         parser_free_buffer(&tokens);
@@ -99,7 +103,7 @@ void run_benchmark(void) {
     /* FASE 3: Integração com função parseada */
     printf("--- FASE 3: Integração (função parseada) ---\n");
     clock_t parsed_start = clock();
-    double result_parsed = integrate_parsed(&rpn, a, b, n_steps);
+    double result_parsed = integrate_parsed(&ctx, &rpn, a, b, n_steps);
     clock_t parsed_end = clock();
     double parsed_time = get_time_diff(parsed_start, parsed_end);
     
@@ -125,7 +129,6 @@ int main(void) {
     printf("╔═══════════════════════════════════════════════════════════╗\n");
     printf("║      MULTICURVAS - Benchmark de Performance              ║\n");
     printf("╚═══════════════════════════════════════════════════════════╝\n\n");
-    parser_set_locale(LOCALE_POINT);
     run_benchmark();
     printf("\n╔═══════════════════════════════════════════════════════════╗\n");
     printf("║                  Benchmark Completo                       ║\n");

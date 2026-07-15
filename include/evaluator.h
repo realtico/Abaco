@@ -18,7 +18,8 @@ typedef struct {
     double value;               /* Valor calculado (válido apenas se error == EVAL_OK) */
 } EvalResult;
 
-/* Avalia expressão em RPN com valor para a variável */
-EvalResult evaluator_eval_rpn(const TokenBuffer *rpn, double var_value);
+/* Avalia expressão em RPN. `variable_values[i]` fornece o valor de `ctx->variables[i]`
+ * (o array deve ter pelo menos `ctx->variable_count` posições). */
+EvalResult evaluator_eval_rpn(const AbacoContext *ctx, const TokenBuffer *rpn, const double *variable_values);
 
 #endif /* EVALUATOR_H */

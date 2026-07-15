@@ -38,9 +38,12 @@ int main(void) {
     /* Exemplo prático */
     printf("=== EXEMPLO: Expressão 'sin(x) + 2 * 3.14' ===\n\n");
     
-    parser_set_locale(LOCALE_POINT);
+    static const char *const variables[] = { "x" };
+    AbacoContext ctx;
+    abaco_context_init(&ctx, variables, 1);
+
     TokenBuffer tokens;
-    ParserError err = parser_tokenize("sin(x) + 2 * 3.14", &tokens);
+    ParserError err = parser_tokenize(&ctx, "sin(x) + 2 * 3.14", &tokens, NULL);
     
     if (err == PARSER_OK) {
         int num_tokens = tokens.size;

@@ -2,16 +2,14 @@
 #define PARSER_H
 
 #include "tokens.h"
-
-/* Define configuração global de locale */
-extern LocaleConfig parser_locale;
+#include "context.h"
 
 /* Buffer para armazenar tokens */
 typedef struct {
     Token *tokens;
     int size;
     int capacity;
-    
+
     /* Array separado para valores numéricos (cache-friendly) */
     double *values;
     int values_size;
@@ -21,21 +19,20 @@ typedef struct {
 /* Estados de parsing */
 typedef enum {
     PARSER_OK = 0,
-    PARSER_UNKNOWN_FUNCTION = 1,
-    PARSER_UNKNOWN_VARIABLE = 2,
-    PARSER_MIXED_VARIABLES = 3,
-    PARSER_SYNTAX_ERROR = 4,
-    PARSER_MEMORY_ERROR = 5
+    PARSER_UNKNOWN_IDENTIFIER = 1,  /* nome que não é variável, função nem constante conhecida */
+    PARSER_SYNTAX_ERROR = 2,
+    PARSER_ARITY_ERROR = 3,         /* número de argumentos não bate com a aridade da função */
+    PARSER_MEMORY_ERROR = 4
 } ParserError;
 
-/* Configura o locale para parsing */
-void parser_set_locale(LocaleConfig locale);
+/* Tokeniza `expr` de acordo com `ctx` (locale, variáveis, funções, constantes).
+ * Se `error_position` não for NULL, recebe o deslocamento em bytes de `expr`
+ * onde o erro foi detectado (ou -1 se não aplicável). */
+ParserError parser_tokenize(const AbacoContext *ctx, const char *expr, TokenBuffer *output, int *error_position);
 
-/* Função principal de parsing */
-ParserError parser_tokenize(const char *expr, TokenBuffer *output);
-
-/* Função para converter para RPN */
-ParserError parser_to_rpn(TokenBuffer *tokens, TokenBuffer *rpn);
+/* Converte tokens infixos para RPN (Shunting-Yard). `ctx` é usado para validar
+ * a aridade das chamadas de função. */
+ParserError parser_to_rpn(const AbacoContext *ctx, TokenBuffer *tokens, TokenBuffer *rpn);
 
 /* Funções auxiliares */
 void parser_init_buffer(TokenBuffer *buf);
